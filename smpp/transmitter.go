@@ -42,6 +42,7 @@ type Transmitter struct {
 	TLS                *tls.Config   // TLS client settings, optional.
 	RateLimiter        RateLimiter   // Rate limiter, optional.
 	WindowSize         uint
+	ConnInterceptor    ConnMiddleware
 	rMutex             sync.Mutex
 	r                  *rand.Rand
 
@@ -87,6 +88,7 @@ func (t *Transmitter) Bind() <-chan ConnStatus {
 		WindowSize:         t.WindowSize,
 		RateLimiter:        t.RateLimiter,
 		BindInterval:       t.BindInterval,
+		ConnInterceptor:    t.ConnInterceptor,
 	}
 	t.cl.client = c
 	c.init()
@@ -122,10 +124,11 @@ func (t *Transmitter) handlePDU(f HandlerFunc) {
 		seq := p.Header().Seq
 		t.tx.Lock()
 		rc := t.tx.inflight[seq]
-		t.tx.Unlock()
 		if rc != nil {
 			rc <- &tx{PDU: p}
+			t.tx.Unlock()
 		} else if f != nil {
+			t.tx.Unlock()
 			f(p)
 		}
 		if p.Header().ID == pdu.DeliverSMID { // Send DeliverSMResp
@@ -182,7 +185,7 @@ type ShortMessage struct {
 	Register pdufield.DeliverySetting
 
 	// Other fields, normally optional.
-	TLVFields			 pdutlv.Fields
+	TLVFields            pdutlv.Fields
 	ServiceType          string
 	SourceAddrTON        uint8
 	SourceAddrNPI        uint8
@@ -317,10 +320,10 @@ func (t *Transmitter) Submit(sm *ShortMessage) (*ShortMessage, error) {
 		if sm.Dst != "" {
 			sm.DstList = append(sm.DstList, sm.Dst)
 		}
-		p := pdu.NewSubmitMulti(sm.TLVFields)
+		p := pdu.NewSubmitMulti()
 		return t.submitMsgMulti(sm, p, uint8(sm.Text.Type()))
 	}
-	p := pdu.NewSubmitSM(sm.TLVFields)
+	p := pdu.NewSubmitSM()
 	return t.submitMsg(sm, p, uint8(sm.Text.Type()))
 }
 
@@ -356,9 +359,24 @@ func (t *Transmitter) SubmitLongMsg(sm *ShortMessage) ([]ShortMessage, error) {
 	UDHHeader[3] = uint8(rn >> 8)    // most significant byte of the reference number
 	UDHHeader[4] = uint8(rn)         // least significant byte of the reference number
 	UDHHeader[5] = uint8(countParts) // total number of message parts
+  
+  //   func (t *Transmitter) SubmitLongMsg(sm *ShortMessage) ([]ShortMessage, error) {
+  // 	maxLen := 134 // 140-6 (UDH)
+  // 	rawMsg := sm.Text.Encode()
+  // 	countParts := int((len(rawMsg)-1)/maxLen) + 1
+
+  // 	ri := uint8(t.r.Intn(128))
+  // 	UDHHeader := make([]byte, 6)
+  // 	UDHHeader[0] = 5
+  // 	UDHHeader[1] = 0
+  // 	UDHHeader[2] = 3
+  // 	UDHHeader[3] = ri
+  // 	UDHHeader[4] = uint8(countParts)
+  // 	responses := []ShortMessage{}
+
 	for i := 0; i < countParts; i++ {
-		UDHHeader[6] = uint8(i + 1) // current message part
-		p := pdu.NewSubmitSM(sm.TLVFields)
+		UDHHeader[5] = uint8(i + 1) // current message part
+		p := pdu.NewSubmitSM()
 		f := p.Fields()
 		f.Set(pdufield.SourceAddr, sm.Src)
 		f.Set(pdufield.DestinationAddr, sm.Dst)
@@ -383,6 +401,15 @@ func (t *Transmitter) SubmitLongMsg(sm *ShortMessage) ([]ShortMessage, error) {
 		f.Set(pdufield.ReplaceIfPresentFlag, sm.ReplaceIfPresentFlag)
 		f.Set(pdufield.SMDefaultMsgID, sm.SMDefaultMsgID)
 		f.Set(pdufield.DataCoding, uint8(sm.Text.Type()))
+		//set the optional parameters in the submit pdu from sm
+		optParams := p.TLVFields()
+		for tag, value := range sm.TLVFields {
+			err := optParams.Set(tag, value)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		resp, err := t.do(p)
 		if err != nil {
 			return nil, err
@@ -390,6 +417,15 @@ func (t *Transmitter) SubmitLongMsg(sm *ShortMessage) ([]ShortMessage, error) {
 		sm.resp.Lock()
 		sm.resp.p = resp.PDU
 		sm.resp.Unlock()
+    
+    // <<<<<<< veoomaster
+    // 		// checking for errors in the responses will be left to the client
+    // 		responses = append(responses, *sm)
+    // 	}
+    // 	return responses, nil
+    //  // END func here
+    // =======
+
 		if resp.PDU == nil {
 			return parts, fmt.Errorf("unexpected empty PDU")
 		}
@@ -429,9 +465,21 @@ func (t *Transmitter) submitMsg(sm *ShortMessage, p pdu.Body, dataCoding uint8) 
 	f.Set(pdufield.ReplaceIfPresentFlag, sm.ReplaceIfPresentFlag)
 	f.Set(pdufield.SMDefaultMsgID, sm.SMDefaultMsgID)
 	f.Set(pdufield.DataCoding, dataCoding)
+	//set the optional parameters in the submit pdu from sm
+	optParams := p.TLVFields()
+	for tag, value := range sm.TLVFields {
+		err := optParams.Set(tag, value)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	resp, err := t.do(p)
 	if err != nil {
 		return nil, err
+	}
+	if resp.PDU == nil {
+		return sm, fmt.Errorf("empty response PDU")
 	}
 	sm.resp.Lock()
 	sm.resp.p = resp.PDU

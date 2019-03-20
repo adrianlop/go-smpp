@@ -46,7 +46,7 @@ func TestServer(t *testing.T) {
 		t.Fatalf("unexpected system_id: want smpptest, have %q", id)
 	}
 	// submit_sm
-	p = pdu.NewSubmitSM(nil)
+	p = pdu.NewSubmitSM()
 	f = p.Fields()
 	f.Set(pdufield.SourceAddr, "foobar")
 	f.Set(pdufield.DestinationAddr, "bozo")
@@ -75,7 +75,8 @@ func TestServer(t *testing.T) {
 		}
 	}
 	// submit_sm + tlv field
-	p = pdu.NewSubmitSM(pdutlv.Fields{ pdutlv.TagReceiptedMessageID: pdutlv.CString("xyz123") })
+	p = pdu.NewSubmitSM()
+	p.TLVFields().Set(pdutlv.ReceiptedMessageID, pdutlv.CString("xyz123"))
 	f = p.Fields()
 	f.Set(pdufield.SourceAddr, "foobar")
 	f.Set(pdufield.DestinationAddr, "bozo")

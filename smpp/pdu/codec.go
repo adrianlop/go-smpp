@@ -6,6 +6,7 @@ package pdu
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"sync/atomic"
@@ -16,18 +17,18 @@ import (
 
 var nextSeq uint32
 
-// codec is the base type of all PDUs.
+// Codec is the base type of all PDUs.
 // It implements the PDU interface and provides a generic encoder.
-type codec struct {
+type Codec struct {
 	h *Header
 	l pdufield.List
 	f pdufield.Map
 	t pdutlv.Map
 }
 
-// init initializes the codec's list and maps and sets the header
+// init initializes the Codec's list and maps and sets the header
 // sequence number.
-func (pdu *codec) init() {
+func (pdu *Codec) init() {
 	if pdu.l == nil {
 		pdu.l = pdufield.List{}
 	}
@@ -39,17 +40,17 @@ func (pdu *codec) init() {
 }
 
 // setup replaces the codec's current maps with the given ones.
-func (pdu *codec) setup(f pdufield.Map, t pdutlv.Map) {
+func (pdu *Codec) setup(f pdufield.Map, t pdutlv.Map) {
 	pdu.f, pdu.t = f, t
 }
 
 // Header implements the PDU interface.
-func (pdu *codec) Header() *Header {
+func (pdu *Codec) Header() *Header {
 	return pdu.h
 }
 
 // Len implements the PDU interface.
-func (pdu *codec) Len() int {
+func (pdu *Codec) Len() int {
 	l := HeaderLen
 	for _, f := range pdu.f {
 		l += f.Len()
@@ -61,26 +62,30 @@ func (pdu *codec) Len() int {
 }
 
 // FieldList implements the PDU interface.
-func (pdu *codec) FieldList() pdufield.List {
+func (pdu *Codec) FieldList() pdufield.List {
 	return pdu.l
 }
 
 // Fields implement the PDU interface.
-func (pdu *codec) Fields() pdufield.Map {
+func (pdu *Codec) Fields() pdufield.Map {
 	return pdu.f
 }
 
 // Fields implement the PDU interface.
-func (pdu *codec) TLVFields() pdutlv.Map {
+func (pdu *Codec) TLVFields() pdutlv.Map {
 	return pdu.t
 }
 
 // SerializeTo implements the PDU interface.
-func (pdu *codec) SerializeTo(w io.Writer) error {
+func (pdu *Codec) SerializeTo(w io.Writer) error {
 	var b bytes.Buffer
 	for _, k := range pdu.FieldList() {
 		f, ok := pdu.f[k]
 		if !ok {
+			// HACK: Skipping serialisation of UDH if it's not found in PDU
+			if k == "gsm_sms_ud.udh.len" || k == "gsm_sms_ud.udh" {
+				continue
+			}
 			pdu.f.Set(k, nil)
 			f = pdu.f[k]
 		}
@@ -102,7 +107,40 @@ func (pdu *codec) SerializeTo(w io.Writer) error {
 	return err
 }
 
-// decoder wraps a PDU (e.g. Bind) and the codec together and is
+type CodecJSON struct {
+	Header    *Header       `json:"header"`
+	FieldList pdufield.List `json:"fieldList"`
+	Fields    pdufield.Map  `json:"fields"`
+	TLVFields pdutlv.Map    `json:"tlvFields"`
+}
+
+func (c *Codec) MarshalJSON() ([]byte, error) {
+	j := CodecJSON{
+		c.Header(),
+		c.FieldList(),
+		c.Fields(),
+		c.TLVFields(),
+	}
+	return json.Marshal(j)
+}
+
+// Since Codec is a private struct, we expose the Unmarshal function
+// for other packages to use it
+func (c *Codec) UnmarshalJSON(b []byte) error {
+	j := CodecJSON{}
+
+	err := json.Unmarshal(b, &j)
+	if err != nil {
+		return err
+	}
+	c.h = j.Header
+	c.l = j.FieldList
+	c.f = j.Fields
+	c.t = j.TLVFields
+	return nil
+}
+
+// decoder wraps a PDU (e.g. Bind) and the Codec together and is
 // used for initializing new PDUs with map data decoded off the wire.
 type decoder interface {
 	Body

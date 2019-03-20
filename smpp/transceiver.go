@@ -28,7 +28,8 @@ type Transceiver struct {
 	BindInterval       time.Duration // Binding retry interval
 	TLS                *tls.Config   // TLS client settings, optional.
 	Handler            HandlerFunc   // Receiver handler, optional.
-	RateLimiter        RateLimiter   // Rate limiter, optional.
+	ConnInterceptor    ConnMiddleware
+	RateLimiter        RateLimiter // Rate limiter, optional.
 	WindowSize         uint
 
 	Transmitter
@@ -54,6 +55,7 @@ func (t *Transceiver) Bind() <-chan ConnStatus {
 		EnquireLinkTimeout: t.EnquireLinkTimeout,
 		RespTimeout:        t.RespTimeout,
 		WindowSize:         t.WindowSize,
+		ConnInterceptor:    t.ConnInterceptor,
 		RateLimiter:        t.RateLimiter,
 		BindInterval:       t.BindInterval,
 	}

@@ -6,6 +6,7 @@ package pdufield
 
 import (
 	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/adrianlop/go-smpp/smpp/pdu/pdutext"
@@ -62,5 +63,37 @@ func TestMapSetTextCodec(t *testing.T) {
 	nt := pdutext.Latin1(pt.Bytes()).Decode()
 	if !bytes.Equal(text, nt) {
 		t.Fatalf("unexpected text: want %q, have %q", text, nt)
+	}
+}
+
+func TestMapJSON(t *testing.T) {
+	m := make(Map)
+	m.Set(ShortMessage, "ShortMessage")
+	m.Set(SourceAddrTON, "DestAddrTON")
+	m.Set(SourceAddrNPI, "DestAddrNPI")
+	m.Set(SourceAddr, "DestinationAddr")
+	m.Set(DestAddrTON, "SourceAddrTON")
+	m.Set(DestAddrNPI, "SourceAddrNPI")
+	m.Set(DestinationAddr, "SourceAddr")
+
+	bytes, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal("error marshaling:", err)
+	}
+
+	other := make(Map)
+	err = json.Unmarshal(bytes, &other)
+	if err != nil {
+		t.Fatal("error unmarshaling:", err)
+	}
+
+	for k, v := range m {
+		if val, ok := other[k]; ok {
+			if val.String() != v.String() {
+				t.Fatalf("expected field to contain: %v, got %v instead", v, val)
+			}
+		} else {
+			t.Fatalf("unexpected field: %v", k)
+		}
 	}
 }

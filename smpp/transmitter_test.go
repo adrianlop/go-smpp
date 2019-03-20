@@ -280,7 +280,7 @@ func TestLongMessageAsUCS2(t *testing.T) {
 	default:
 		t.Fatal(conn.Error())
 	}
-	sm, err := tx.SubmitLongMsg(&ShortMessage{
+	sms, err := tx.SubmitLongMsg(&ShortMessage{
 		Src:      "root",
 		Dst:      "foobar",
 		Text:     pdutext.UCS2(shortMsg),
@@ -290,17 +290,14 @@ func TestLongMessageAsUCS2(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	msgid := sm.RespID()
-	if msgid == "" {
-		t.Fatalf("pdu does not contain msgid: %#v", sm.Resp())
-	}
-
-	if receivedMsg != shortMsg {
-		t.Fatalf("receivedMsg: %v, does not match shortMsg: %v", receivedMsg, shortMsg)
-	}
-
-	if msgid != "foobar" {
-		t.Fatalf("unexpected msgid: want foobar, have %q", msgid)
+	for _, sm := range sms {
+		msgid := sm.RespID()
+		if msgid == "" {
+			t.Fatalf("pdu does not contain msgid: %#v", sm.Resp())
+		}
+		if msgid != "foobar" {
+			t.Fatalf("unexpected msgid: want foobar, have %q", msgid)
+		}
 	}
 }
 

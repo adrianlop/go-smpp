@@ -5,8 +5,8 @@
 package smpp
 
 import (
-	"context"
 	"crypto/tls"
+	"golang.org/x/net/context"
 	"io"
 	"math"
 	"sync"
@@ -67,6 +67,11 @@ type ClientConn interface {
 	Closer
 }
 
+// ConnMiddleware is useful for intercepting the traffic in/out happening
+// for the SMPP server. It should be used in a read-only way since might
+// effect the internal work of the SMPP server itself.
+type ConnMiddleware func(conn Conn) Conn
+
 // RateLimiter defines an interface for pacing the sending
 // of short messages to a client connection.
 //
@@ -91,6 +96,7 @@ type client struct {
 	RespTimeout        time.Duration
 	BindInterval       time.Duration
 	WindowSize         uint
+	ConnInterceptor    ConnMiddleware
 	RateLimiter        RateLimiter
 
 	// internal stuff.
@@ -135,6 +141,10 @@ func (c *client) Bind() {
 			})
 			goto retry
 		}
+		if c.ConnInterceptor != nil {
+			conn = c.ConnInterceptor(conn)
+		}
+
 		c.conn.Set(conn)
 		if err = c.BindFunc(c.conn); err != nil {
 			c.notify(&connStatus{s: BindFailed, err: err})

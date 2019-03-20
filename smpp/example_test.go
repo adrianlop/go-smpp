@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-package smpp_test
+package smpp
 
 import (
 	"io"
@@ -30,7 +30,7 @@ func ExampleReceiver() {
 				src, dst, txt)
 		}
 	}
-	r := &smpp.Receiver{
+	r := &Receiver{
 		Addr:    "localhost:2775",
 		User:    "foobar",
 		Passwd:  "secret",
@@ -46,17 +46,28 @@ func ExampleReceiver() {
 }
 
 func ExampleTransmitter() {
-	tx := &smpp.Transmitter{
+	tx := &Transmitter{
 		Addr:   "localhost:2775",
 		User:   "foobar",
 		Passwd: "secret",
 	}
-	// Create persistent connection, wait for the first status.
-	conn := <-tx.Bind()
-	if conn.Status() != smpp.Connected {
+	conn := <-tx.Bind() // make persistent connection.
+	switch conn.Status() {
+	case Connected:
+		sm, err := tx.Submit(&ShortMessage{
+			Src:      "sender",
+			Dst:      "recipient",
+			Text:     pdutext.Latin1("Olá mundo"),
+			Register: pdufield.NoDeliveryReceipt,
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Println("Message ID:", sm.RespID())
+	default:
 		log.Fatal(conn.Error())
 	}
-	sm, err := tx.Submit(&smpp.ShortMessage{
+	sm, err := tx.Submit(&ShortMessage{
 		Src:      "sender",
 		Dst:      "recipient",
 		Text:     pdutext.Latin1("Olá mundo"),
@@ -81,7 +92,7 @@ func ExampleTransceiver() {
 		}
 	}
 	lm := rate.NewLimiter(rate.Limit(10), 1) // Max rate of 10/s.
-	tx := &smpp.Transceiver{
+	tx := &Transceiver{
 		Addr:        "localhost:2775",
 		User:        "foobar",
 		Passwd:      "secret",
@@ -96,13 +107,13 @@ func ExampleTransceiver() {
 		}
 	}()
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		sm, err := tx.Submit(&smpp.ShortMessage{
+		sm, err := tx.Submit(&ShortMessage{
 			Src:      r.FormValue("src"),
 			Dst:      r.FormValue("dst"),
 			Text:     pdutext.Raw(r.FormValue("text")),
 			Register: pdufield.FinalDeliveryReceipt,
 		})
-		if err == smpp.ErrNotConnected {
+		if err == ErrNotConnected {
 			http.Error(w, "Oops.", http.StatusServiceUnavailable)
 			return
 		}

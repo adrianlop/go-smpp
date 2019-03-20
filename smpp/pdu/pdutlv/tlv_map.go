@@ -5,7 +5,10 @@
 package pdutlv
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"strconv"
 )
 
 // Map is a collection of PDU TLV field data indexed by tag.
@@ -37,8 +40,50 @@ func (m Map) Set(t Tag, v interface{}) error {
 		m[t] = NewTLV(t, []byte(v.([]byte)))
 	case Body:
 		m[t] = v.(Body)
+	case MessageStateType:
+		m[t] = NewTLV(MessageStateOption, []byte{uint8(v.(MessageStateType))})
 	default:
 		return fmt.Errorf("unsupported Tag-Length-Value field data: %#v", v)
 	}
+	return nil
+}
+
+func (m Map) MarshalJSON() ([]byte, error) {
+	buffer := bytes.NewBufferString("{")
+	length := len(m)
+	count := 0
+	for k, v := range m {
+		jsonValue, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		buffer.WriteString(fmt.Sprintf("\"%d\":%s", k, string(jsonValue)))
+		count++
+		if count < length {
+			buffer.WriteString(",")
+		}
+	}
+	buffer.WriteString("}")
+	return buffer.Bytes(), nil
+}
+
+func (m *Map) UnmarshalJSON(b []byte) error {
+	if *m == nil {
+		*m = Map{}
+	}
+	var tmp map[string]*Field
+	err := json.Unmarshal(b, &tmp)
+	if err != nil {
+		return err
+	}
+	mtmp := map[Tag]Body{}
+	for k, v := range tmp {
+		numericKey, err := strconv.Atoi(k)
+		if err != nil {
+			return err
+		}
+		mtmp[Tag(numericKey)] = v
+	}
+	*m = mtmp
 	return nil
 }

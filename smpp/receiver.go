@@ -28,6 +28,7 @@ type Receiver struct {
 	MergeCleanupInterval time.Duration // How often to cleanup expired message parts
 	TLS                  *tls.Config
 	Handler              HandlerFunc
+	ConnInterceptor      ConnMiddleware
 	SkipAutoRespondIDs   []pdu.ID
 
 	chanClose chan struct{}
@@ -85,6 +86,7 @@ func (r *Receiver) Bind() <-chan ConnStatus {
 		EnquireLinkTimeout: r.EnquireLinkTimeout,
 		Status:             make(chan ConnStatus, 1),
 		BindFunc:           r.bindFunc,
+		ConnInterceptor:    r.ConnInterceptor,
 		BindInterval:       r.BindInterval,
 	}
 	r.cl.client = c
