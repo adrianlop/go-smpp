@@ -5,15 +5,16 @@
 package smpp
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"golang.org/x/time/rate"
 
-	"github.com/veoo/go-smpp/smpp/pdu"
-	"github.com/veoo/go-smpp/smpp/pdu/pdufield"
-	"github.com/veoo/go-smpp/smpp/pdu/pdutext"
-	"github.com/veoo/go-smpp/smpp/smpptest"
+	"github.com/adrianlop/go-smpp/smpp/pdu"
+	"github.com/adrianlop/go-smpp/smpp/pdu/pdufield"
+	"github.com/adrianlop/go-smpp/smpp/pdu/pdutext"
+	"github.com/adrianlop/go-smpp/smpp/smpptest"
 )
 
 func TestShortMessage(t *testing.T) {
@@ -121,12 +122,14 @@ func TestShortMessageWindowSize(t *testing.T) {
 
 func TestLongMessage(t *testing.T) {
 	s := smpptest.NewUnstartedServer()
+	count := 0
 	s.Handler = func(c smpptest.Conn, p pdu.Body) {
 		switch p.Header().ID {
 		case pdu.SubmitSMID:
 			r := pdu.NewSubmitSMResp()
 			r.Header().Seq = p.Header().Seq
-			r.Fields().Set(pdufield.MessageID, "foobar")
+			r.Fields().Set(pdufield.MessageID, fmt.Sprintf("foobar%d", count))
+			count++
 			c.Write(r)
 		default:
 			smpptest.EchoHandler(c, p)
@@ -146,7 +149,7 @@ func TestLongMessage(t *testing.T) {
 	default:
 		t.Fatal(conn.Error())
 	}
-	sms, err := tx.SubmitLongMsg(&ShortMessage{
+	parts, err := tx.SubmitLongMsg(&ShortMessage{
 		Src:      "root",
 		Dst:      "foobar",
 		Text:     pdutext.Raw("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam consequat nisl enim, vel finibus neque aliquet sit amet. Interdum et malesuada fames ac ante ipsum primis in faucibus."),
@@ -156,13 +159,85 @@ func TestLongMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := range sms {
-		msgid := sms[i].RespID()
+	if len(parts) != 2 {
+		t.Fatalf("expected %d responses, but received %d", 2, len(parts))
+	}
+	for index, sm := range parts {
+		msgid := sm.RespID()
 		if msgid == "" {
-			t.Fatalf("pdu does not contain msgid: %#v", sms[i].Resp())
+			t.Fatalf("pdu does not contain msgid: %#v", sm.Resp())
 		}
-		if msgid != "foobar" {
-			t.Fatalf("unexpected msgid: want foobar, have %q", msgid)
+		if msgid != fmt.Sprintf("foobar%d", index) {
+			t.Fatalf("unexpected msgid: want foobar%d, have %q", index, msgid)
+		}
+	}
+}
+
+func TestLongMessageAsUCS2(t *testing.T) {
+	s := smpptest.NewUnstartedServer()
+	var receivedMsg string
+	shortMsg := "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam consequat nisl enim, vel finibus neque aliquet sit amet. Interdum et malesuada fames ac ante ipsum primis in faucibus. ✓"
+	count := 0
+	s.Handler = func(c smpptest.Conn, p pdu.Body) {
+		switch p.Header().ID {
+		case pdu.SubmitSMID:
+			r := pdu.NewSubmitSMResp()
+			r.Header().Seq = p.Header().Seq
+			r.Fields().Set(pdufield.MessageID, fmt.Sprintf("foobar%d", count))
+			count++
+			smByts := p.Fields()[pdufield.ShortMessage].Bytes()
+			switch pdutext.DataCoding(p.Fields()[pdufield.DataCoding].Raw().(uint8)) {
+			case pdutext.Latin1Type:
+				receivedMsg = receivedMsg + string(pdutext.Latin1(smByts)[7:].Decode())
+			case pdutext.UCS2Type:
+				receivedMsg = receivedMsg + string(pdutext.UCS2(smByts)[7:].Decode())
+			default:
+				receivedMsg = receivedMsg + string(smByts[7:])
+			}
+			c.Write(r)
+		default:
+			smpptest.EchoHandler(c, p)
+		}
+	}
+	s.Start()
+	defer s.Close()
+	tx := &Transmitter{
+		Addr:   s.Addr(),
+		User:   smpptest.DefaultUser,
+		Passwd: smpptest.DefaultPasswd,
+	}
+	defer tx.Close()
+	conn := <-tx.Bind()
+	switch conn.Status() {
+	case Connected:
+	default:
+		t.Fatal(conn.Error())
+	}
+	parts, err := tx.SubmitLongMsg(&ShortMessage{
+		Src:      "root",
+		Dst:      "foobar",
+		Text:     pdutext.UCS2(shortMsg),
+		Validity: 10 * time.Minute,
+		Register: pdufield.NoDeliveryReceipt,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parts) != 3 {
+		t.Fatalf("expected %d responses, but received %d", 3, len(parts))
+	}
+	for index, sm := range parts {
+		msgid := sm.RespID()
+		if msgid == "" {
+			t.Fatalf("pdu does not contain msgid: %#v", sm.Resp())
+		}
+
+		if receivedMsg != shortMsg {
+			t.Fatalf("receivedMsg: %v, does not match shortMsg: %v", receivedMsg, shortMsg)
+		}
+
+		if msgid != fmt.Sprintf("foobar%d", index) {
+			t.Fatalf("unexpected msgid: want foobar%d, have %q", index, msgid)
 		}
 	}
 }

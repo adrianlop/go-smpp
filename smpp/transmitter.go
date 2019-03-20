@@ -15,10 +15,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/veoo/go-smpp/smpp/pdu"
-	"github.com/veoo/go-smpp/smpp/pdu/pdufield"
-	"github.com/veoo/go-smpp/smpp/pdu/pdutext"
-	"github.com/veoo/go-smpp/smpp/pdu/pdutlv"
+	"github.com/adrianlop/go-smpp/smpp/pdu"
+	"github.com/adrianlop/go-smpp/smpp/pdu/pdufield"
+	"github.com/adrianlop/go-smpp/smpp/pdu/pdutext"
+	"github.com/adrianlop/go-smpp/smpp/pdu/pdutlv"
 )
 
 // ErrMaxWindowSize is returned when an operation (such as Submit) violates
@@ -118,7 +118,7 @@ func (t *Transmitter) bindFunc(c Conn) error {
 func (t *Transmitter) handlePDU(f HandlerFunc) {
 	for {
 		p, err := t.cl.Read()
-		if err != nil {
+		if err != nil || p == nil {
 			break
 		}
 		seq := p.Header().Seq
@@ -330,19 +330,50 @@ func (t *Transmitter) Submit(sm *ShortMessage) (*ShortMessage, error) {
 // SubmitLongMsg sends a long message (more than 140 bytes)
 // and returns and updates the given sm with the response status.
 // It returns the same sm object.
+// func (t *Transmitter) SubmitLongMsg(sm *ShortMessage) (*ShortMessage, error) {
 func (t *Transmitter) SubmitLongMsg(sm *ShortMessage) ([]ShortMessage, error) {
-	maxLen := 134 // 140-6 (UDH)
+	maxLen := 133 // 140-7 (UDH with 2 byte reference number)
+	switch sm.Text.Type() {
+  // 	case pdutext.GSM7:
+  // 		maxLen = 152 // to avoid an escape character being split between payloads
+  // 		break
+  // 	case pdutext.GSM7Packed:
+  // 		maxLen = 132 // to avoid an escape character being split between payloads
+  // 		break
+	case pdutext.UCS2Type:
+		maxLen = 132 // to avoid a character being split between payloads
+		break
+	}
 	rawMsg := sm.Text.Encode()
 	countParts := int((len(rawMsg)-1)/maxLen) + 1
 
-	ri := uint8(t.r.Intn(128))
-	UDHHeader := make([]byte, 6)
-	UDHHeader[0] = 5
-	UDHHeader[1] = 0
-	UDHHeader[2] = 3
-	UDHHeader[3] = ri
-	UDHHeader[4] = uint8(countParts)
-	responses := []ShortMessage{}
+	parts := make([]ShortMessage, 0, countParts)
+
+	t.rMutex.Lock()
+	rn := uint16(t.r.Intn(0xFFFF))
+	t.rMutex.Unlock()
+	UDHHeader := make([]byte, 7)
+	UDHHeader[0] = 0x06              // length of user data header
+	UDHHeader[1] = 0x08              // information element identifier, CSMS 16 bit reference number
+	UDHHeader[2] = 0x04              // length of remaining header
+	UDHHeader[3] = uint8(rn >> 8)    // most significant byte of the reference number
+	UDHHeader[4] = uint8(rn)         // least significant byte of the reference number
+	UDHHeader[5] = uint8(countParts) // total number of message parts
+  
+  //   func (t *Transmitter) SubmitLongMsg(sm *ShortMessage) ([]ShortMessage, error) {
+  // 	maxLen := 134 // 140-6 (UDH)
+  // 	rawMsg := sm.Text.Encode()
+  // 	countParts := int((len(rawMsg)-1)/maxLen) + 1
+
+  // 	ri := uint8(t.r.Intn(128))
+  // 	UDHHeader := make([]byte, 6)
+  // 	UDHHeader[0] = 5
+  // 	UDHHeader[1] = 0
+  // 	UDHHeader[2] = 3
+  // 	UDHHeader[3] = ri
+  // 	UDHHeader[4] = uint8(countParts)
+  // 	responses := []ShortMessage{}
+
 	for i := 0; i < countParts; i++ {
 		UDHHeader[5] = uint8(i + 1) // current message part
 		p := pdu.NewSubmitSM()
@@ -386,10 +417,30 @@ func (t *Transmitter) SubmitLongMsg(sm *ShortMessage) ([]ShortMessage, error) {
 		sm.resp.Lock()
 		sm.resp.p = resp.PDU
 		sm.resp.Unlock()
-		// checking for errors in the responses will be left to the client
-		responses = append(responses, *sm)
+    
+    // <<<<<<< veoomaster
+    // 		// checking for errors in the responses will be left to the client
+    // 		responses = append(responses, *sm)
+    // 	}
+    // 	return responses, nil
+    //  // END func here
+    // =======
+
+		if resp.PDU == nil {
+			return parts, fmt.Errorf("unexpected empty PDU")
+		}
+		if id := resp.PDU.Header().ID; id != pdu.SubmitSMRespID {
+			return parts, fmt.Errorf("unexpected PDU ID: %s", id)
+		}
+		if s := resp.PDU.Header().Status; s != 0 {
+			return parts, s
+		}
+		if resp.Err != nil {
+			return parts, resp.Err
+		}
+		parts = append(parts, *sm)
 	}
-	return responses, nil
+	return parts, nil
 }
 
 func (t *Transmitter) submitMsg(sm *ShortMessage, p pdu.Body, dataCoding uint8) (*ShortMessage, error) {

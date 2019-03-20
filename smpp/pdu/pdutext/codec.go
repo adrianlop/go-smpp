@@ -9,7 +9,7 @@ type DataCoding uint8
 
 // Supported text codecs.
 const (
-	//	DefaultType   DataCoding = 0x00 // SMSC Default Alphabet
+	//  DefaultType DataCoding = 0x00 // SMSC Default Alphabet
 	//	IA5Type       DataCoding = 0x01 // IA5 (CCITT T.50)/ASCII (ANSI X3.4)
 	//	BinaryType    DataCoding = 0x02 // Octet unspecified (8-bit binary)
 	Latin1Type DataCoding = 0x03 // Latin 1 (ISO-8859-1)

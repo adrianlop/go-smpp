@@ -10,8 +10,8 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/veoo/go-smpp/smpp/pdu"
-	"github.com/veoo/go-smpp/smpp/pdu/pdufield"
+	"github.com/adrianlop/go-smpp/smpp/pdu"
+	"github.com/adrianlop/go-smpp/smpp/pdu/pdufield"
 )
 
 // Transceiver implements an SMPP transceiver.
