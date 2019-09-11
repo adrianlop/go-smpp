@@ -158,7 +158,7 @@ func (r *Receiver) handlePDU() {
 loop:
 	for {
 		p, err := r.cl.Read()
-		if err != nil {
+		if err != nil || p == nil {
 			break
 		}
 
@@ -229,7 +229,12 @@ loop:
 				// Merge PDUs
 				var buf bytes.Buffer
 				for _, body := range orderedBodies {
-					buf.Write(body.Bytes())
+					if body != nil {
+						_, err := buf.Write(body.Bytes())
+						if err != nil {
+							continue
+						}
+					}
 				}
 
 				p.Fields().Set(pdufield.ShortMessage, buf.Bytes())
