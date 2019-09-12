@@ -110,8 +110,8 @@ func (c *client) init() {
 	if c.RateLimiter != nil {
 		c.lmctx = context.Background()
 	}
-	if c.EnquireLink < 10*time.Second {
-		c.EnquireLink = 10 * time.Second
+	if c.EnquireLink < 1*time.Second {
+		c.EnquireLink = 5 * time.Second
 	}
 
 	if c.EnquireLinkTimeout == 0 {
@@ -140,6 +140,7 @@ func (c *client) Bind() {
 			c.notify(&connStatus{s: BindFailed, err: err})
 			goto retry
 		}
+		c.conn.Write(pdu.NewEnquireLink())
 		go c.enquireLink(eli)
 		c.notify(&connStatus{s: Connected})
 		delay = 1
