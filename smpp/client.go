@@ -140,7 +140,6 @@ func (c *client) Bind() {
 			c.notify(&connStatus{s: BindFailed, err: err})
 			goto retry
 		}
-		c.conn.Write(pdu.NewEnquireLink())
 		go c.enquireLink(eli)
 		c.notify(&connStatus{s: Connected})
 		delay = 1
