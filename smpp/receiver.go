@@ -221,7 +221,13 @@ loop:
 				}
 
 				// Order up PDUs
-				orderedBodies = make([]*bytes.Buffer, partsCount)
+				// FIXME: added +1 to partsCount due to panic - index out of range:
+				// panic: runtime error: index out of range [4] with length 3
+				// goroutine 110 [running]:
+				// github.com/fiorix/go-smpp/smpp.(*Receiver).handlePDU(0xc000386000)
+				// 	/go/pkg/mod/github.com/adrianlop/go-smpp@v0.0.0-20190912131229-0a1b0575a407/smpp/receiver.go:226 +0xa6f
+				// created by github.com/fiorix/go-smpp/smpp.(*Receiver).bindFunc
+				orderedBodies = make([]*bytes.Buffer, partsCount+3)
 				for _, mp := range mh.MessageParts {
 					orderedBodies[mp.PartID-1] = mp.Data
 				}
