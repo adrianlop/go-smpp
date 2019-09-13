@@ -217,7 +217,7 @@ loop:
 
 				if mh.PartsCount != partsCount {
 					fmt.Printf("OJOBUG: msgID-%v, mh.PartsCount-%v, partsCount-%v, partID-%v\n", udh.IEData.Data[0], mh.PartsCount, udh.IEData.Data[1], udh.IEData.Data[2])
-					fmt.Printf("OJOBUG: MergeHolder = %v", mh)
+					fmt.Printf("OJOBUG: MergeHolder = %+v\n", mh)
 				}
 
 				// Check if we have all the parts of the message
@@ -235,9 +235,6 @@ loop:
 				orderedBodies = make([]*bytes.Buffer, partsCount+3)
 				// TODO: maybe this is a FIX  ==> orderedBodies = make([]*bytes.Buffer, mh.PartsCount)
 				for _, mp := range mh.MessageParts {
-					// if mp.PartID-1 > partsCount {
-					// 	fmt.Printf("OJOBUG: msgID-%v, mh.PartsCount-%v, partsCount-%v, partID-%v\n", udh.IEData.Data[0], mh.PartsCount, udh.IEData.Data[1], udh.IEData.Data[2])
-					// }
 					orderedBodies[mp.PartID-1] = mp.Data
 				}
 
