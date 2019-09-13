@@ -235,7 +235,7 @@ loop:
 				// Merge PDUs
 				var buf bytes.Buffer
 				for _, body := range orderedBodies {
-					if body != nil {
+					if body != nil || body != "" {
 						_, err := buf.Write(body.Bytes())
 						if err != nil {
 							continue
