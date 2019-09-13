@@ -215,9 +215,11 @@ loop:
 				})
 				mh.LastWriteTime = time.Now()
 
+				fmt.Printf("OJOBUG: msgID-%v, partID-%v, partsCount-%v, mh.PartsCount-%v\n", udh.IEData.Data[0], mh.PartsCount, udh.IEData.Data[1], udh.IEData.Data[2])
+				fmt.Printf("OJOBUG: MergeHolder = %+v\n", mh)
+
 				if mh.PartsCount != partsCount {
-					fmt.Printf("OJOBUG: msgID-%v, mh.PartsCount-%v, partsCount-%v, partID-%v\n", udh.IEData.Data[0], mh.PartsCount, udh.IEData.Data[1], udh.IEData.Data[2])
-					fmt.Printf("OJOBUG: MergeHolder = %+v\n", mh)
+					fmt.Printf("Potentially wrong MsgID: %v\n", msgID)
 				}
 
 				// Check if we have all the parts of the message
