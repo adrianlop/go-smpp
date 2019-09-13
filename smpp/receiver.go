@@ -220,6 +220,10 @@ loop:
 					continue loop
 				}
 
+				if mh.PartsCount != partsCount {
+					fmt.Println("OJOBUG: mh.PartsCount-%v, partsCount-%v", mh.PartsCount, partsCount)
+				}
+
 				// Order up PDUs
 				// FIXME: added +1 to partsCount due to panic - index out of range:
 				// panic: runtime error: index out of range [4] with length 3
@@ -229,13 +233,16 @@ loop:
 				// created by github.com/fiorix/go-smpp/smpp.(*Receiver).bindFunc
 				orderedBodies = make([]*bytes.Buffer, partsCount+3)
 				for _, mp := range mh.MessageParts {
+					if mp.PartID-1 > partsCount {
+						fmt.Println("OJOBUG: msgID-%v, partsCount-%v, partID-%v", udh.IEData.Data[0], udh.IEData.Data[1], udh.IEData.Data[2])
+					}
 					orderedBodies[mp.PartID-1] = mp.Data
 				}
 
 				// Merge PDUs
 				var buf bytes.Buffer
 				for _, body := range orderedBodies {
-					if body != nil || body != "" {
+					if body != nil {
 						_, err := buf.Write(body.Bytes())
 						if err != nil {
 							continue
