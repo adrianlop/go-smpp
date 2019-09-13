@@ -215,27 +215,29 @@ loop:
 				})
 				mh.LastWriteTime = time.Now()
 
+				if mh.PartsCount != partsCount {
+					fmt.Printf("OJOBUG: msgID-%v, mh.PartsCount-%v, partsCount-%v, partID-%v\n", udh.IEData.Data[0], mh.PartsCount, udh.IEData.Data[1], udh.IEData.Data[2])
+					fmt.Printf("OJOBUG: MergeHolder = %v", mh)
+				}
+
 				// Check if we have all the parts of the message
 				if len(mh.MessageParts) != mh.PartsCount {
 					continue loop
 				}
 
-				if mh.PartsCount != partsCount {
-					fmt.Println("OJOBUG: mh.PartsCount-%v, partsCount-%v", mh.PartsCount, partsCount)
-				}
-
 				// Order up PDUs
-				// FIXME: added +1 to partsCount due to panic - index out of range:
+				// FIXME: added +3 to partsCount due to panic - index out of range:
 				// panic: runtime error: index out of range [4] with length 3
 				// goroutine 110 [running]:
 				// github.com/fiorix/go-smpp/smpp.(*Receiver).handlePDU(0xc000386000)
 				// 	/go/pkg/mod/github.com/adrianlop/go-smpp@v0.0.0-20190912131229-0a1b0575a407/smpp/receiver.go:226 +0xa6f
 				// created by github.com/fiorix/go-smpp/smpp.(*Receiver).bindFunc
 				orderedBodies = make([]*bytes.Buffer, partsCount+3)
+				// TODO: maybe this is a FIX  ==> orderedBodies = make([]*bytes.Buffer, mh.PartsCount)
 				for _, mp := range mh.MessageParts {
-					if mp.PartID-1 > partsCount {
-						fmt.Println("OJOBUG: msgID-%v, partsCount-%v, partID-%v", udh.IEData.Data[0], udh.IEData.Data[1], udh.IEData.Data[2])
-					}
+					// if mp.PartID-1 > partsCount {
+					// 	fmt.Printf("OJOBUG: msgID-%v, mh.PartsCount-%v, partsCount-%v, partID-%v\n", udh.IEData.Data[0], mh.PartsCount, udh.IEData.Data[1], udh.IEData.Data[2])
+					// }
 					orderedBodies[mp.PartID-1] = mp.Data
 				}
 
